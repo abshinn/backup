@@ -175,8 +175,8 @@ class Backup:
         alldirs = {}
         allfiles = {}
         for directory in self.directories: 
-            if not os.path.isdir(directory): continue
             directory = os.path.abspath(os.path.expanduser(directory))
+            if not os.path.isdir(directory): continue
             print('b given directory: {}'.format(directory))
             # store root directory
             alldirs[directory] = { 'modtime': [os.path.getmtime(directory)] }
@@ -274,5 +274,5 @@ def readmod(modfile):
     return moddict
 
 if __name__ == "__main__":
-    Backup(backupdir = "~/Dropbox")
-    #Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
+    #Backup(backupdir = "~/Dropbox")
+    Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
