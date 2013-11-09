@@ -4,9 +4,6 @@
 # - run backup to save current system's files
 # - run backup to check for other system's changes
 
-
-
-
 import os, pickle, time
 import pdb
 
@@ -64,101 +61,6 @@ class BackupInfo:
                "  {self.nfiles} {self.exts!r} files from {self.directories!r}".format(self=self)
 
 
-def showbackup(backupdir=''):
-    if not backupdir: backupdir = os.getcwd()
-
-    backupdir_files = os.listdir(backupdir)
-    
-    for file in backupdir_files:
-        if 'backup.dat' in file.split('_'):
-            with open(file, "rb") as f:
-                backupinfo = pickle.load(f)
-            print(backupinfo)
-            #print("{nodename} {nfiles} {btime_utc}".format(**backupinfo))
-
-def newbackup(directories = [], backupdir = ''):
-    """given list of absdirpaths, pickle File classes"""
-    # name backup file, include provided path if applicable 
-    if backupdir:
-        backupfile = os.path.join(moddir,'backup.dat')
-    else: 
-        backupfile = os.path.join(os.getcwd(),'backup.dat')
-
-    # initialize dictionaries
-    alldirs = {}
-    allfiles = {}
-    for directory in directories: 
-        if not os.path.isdir(directory): continue
-        directory = os.path.abspath(os.path.expanduser(directory))
-        print('b given directory: {}'.format(directory))
-        for root, dirs, files in os.walk(directory):
-            #if os.path.isfile(os.path.join(root,".backupignore")): continue
-            for dirname in dirs:
-                absdirpath = os.path.join(root, dirname)
-                if not os.path.isdir(absdirpath): continue
-                print('b directory: {}'.format(absdirpath))
-                alldirs[absdirpath] = { 'dirname': dirname,
-                                        'modtime': [os.path.getmtime(absdirpath)] }
-            for filename in files:
-                ext = os.path.splitext(filename)[-1].lstrip('.')
-                if ext in ['py', 'txt', 'R']:
-                    absfilepath = os.path.join(root, filename)
-                    if not os.path.isfile(absfilepath): continue
-                    print('b file: {}'.format(absfilepath))
-                    #with open(absfilepath, "rb") as fileobj:
-                    #    contents = fileobj.read()
-                    allfiles[absfilepath] = { 'filename': filename,
-                                               'modtime': [os.path.getmtime(absfilepath)],
-                                                  'size': [os.path.getsize( absfilepath)] }
-                                            # 'contents': contents }
-        # include higher level backup information
-        info = { 'nodename': os.uname().nodename,
-                'btime_sys': time.time(),
-                    'ndirs': len(alldirs),
-                   'nfiles': len(allfiles),
-              'directories': directories, # directories searched
-                'backupdir': backupdir }
-        # pickle dictionaries - note the order for unpickling
-        with open(backupfile, "wb") as dat:
-            pickle.dump(info, dat)
-            pickle.dump(alldirs, dat)
-            pickle.dump(allfiles, dat)
-
-
-
-
-    # get modification log from pickled backup file
-    # if none found, ask to create new if not found
-    #if not os.path.isfile(modfile): 
-    #    y_or_n = input("No backup file found. Create new within {}? [y/n]".format(moddir))
-    #    if y_or_n == "y": 
-    #        Backup(directories=directories, moddir=moddir, exts=exts, pickle=True).backup()
-    #    return
-
-    # load pickled backup file
-    #with open(modfile, "rb") as f:
-    #    backupdict = pickle.load(f)
-    
-    # run backup to obtain current state of files
-    #currentdict = backup(directories=directories, moddir=moddir, exts=exts)
-    
-    #diff = []
-    #for abspath, filedict in currentdict.items():
-    #    try:
-    #        prev_mtime = backupdict[abspath]['modtime']
-    #    except KeyError:
-    #        continue
-    #    mtime = filedict['modtime']
-    #    if mtime > prev_mtime:
-    #        diff.append(FileMod_fromdict(filedict))
-    #    else: continue
-    #if not diff:
-    #    print("No modifications made.")
-    #else:
-    #    print("Modified Files")
-    #    for filemodobj in diff:
-    #        print(filemodobj)
-
 class Backup:
     def __init__(self, directories = [], backupdir = '', exts = ['py', 'txt', 'R'], newbackup = False):
 
@@ -167,8 +69,8 @@ class Backup:
         # check for pickled backup file
         if not backupdir:
             backupdir = os.getcwd()
-        self.backupdir = backupdir
-        self.backupfile = os.path.join(backupdir,'backup.dat')
+        self.backupdir = os.path.abspath(os.path.expanduser(backupdir))
+        self.backupfile = os.path.join(self.backupdir,'backup.dat')
 
         self.newbackup = newbackup
         if self.newbackup:
@@ -218,7 +120,7 @@ class Backup:
             self.removed_dirs = removed_dirs
 
             # store new and changed files in aptly named dictionaries
-            new_files, changed_files = {}, {}
+            new_files, changed_files, ignore_files = {}, {}, {}
             for filename in self.curr_files:
                 if filename not in self.back_files: 
                     new_files[filename] = self.curr_files[filename]
@@ -227,9 +129,11 @@ class Backup:
                     changed_files[filename] = self.curr_files[filename]
                     print("changed: {}".format(filename))
                 elif self.curr_files[filename]['modtime'][0] < self.back_files[filename]['modtime'][0]:
+                    ignore_files[filename] = self.curr_files[filename]
                     print("WARNING") # create an error to raise here
             self.new_files = new_files
             self.changed_files = changed_files
+            self.ignore_files = ignore_files
 
             # check for removed files
             removed_files = {}
@@ -255,12 +159,11 @@ class Backup:
                     pickle.dump(self.curr_dirs, dat)
                     pickle.dump(self.curr_files, dat)
             else: # if the last backup was not on the current system:
-                # check to make sure current system's modification isn't newer than the backup system's mods
-                for dirname in self.curr_dirs:
-                    if self.curr_dirs[dirname]['modtime'][0] > self.back_dirs[dirname]['modtime'][0]:
-                        print("Files have been modified on this system since last backup! {}".format(dirname))
                 # if so, then write to file system
                 print("b DIFFERENT NODENAME")
+                # check to make sure current system's modification isn't newer than the backup system's mods
+                if self.ignore_files:
+                    print("Files have been modified on this system since last backup! {}".format(len(self.ignore_files)))
 
         # if files are changed on same system, update backup file 
         # if files have been changed on other system:
@@ -276,16 +179,14 @@ class Backup:
             directory = os.path.abspath(os.path.expanduser(directory))
             print('b given directory: {}'.format(directory))
             # store root directory
-            alldirs[directory] = { 'dirname': os.path.basename(directory),
-                                   'modtime': [os.path.getmtime(directory)] }
+            alldirs[directory] = { 'modtime': [os.path.getmtime(directory)] }
             for root, dirs, files in os.walk(directory):
                 #if os.path.isfile(os.path.join(root,".backupignore")): continue
                 for dirname in dirs:
                     absdirpath = os.path.join(root, dirname)
                     if not os.path.isdir(absdirpath): continue
                     print('b directory: {}'.format(absdirpath))
-                    alldirs[absdirpath] = { 'dirname': dirname,
-                                            'modtime': [os.path.getmtime(absdirpath)] }
+                    alldirs[absdirpath] = { 'modtime': [os.path.getmtime(absdirpath)] }
                 for filename in files:
                     ext = os.path.splitext(filename)[-1].lstrip('.')
                     if ext in ['py', 'txt', 'R']:
@@ -294,17 +195,9 @@ class Backup:
                         print('b file: {}'.format(absfilepath))
                         #with open(absfilepath, "rb") as fileobj:
                         #    contents = fileobj.read()
-                        allfiles[absfilepath] = { 'filename': filename,
-                                                   'modtime': [os.path.getmtime(absfilepath)],
-                                                      'size': [os.path.getsize( absfilepath)] }
-                                                # 'contents': contents }
-        ## include higher level backup information
-        #info = { 'nodename': os.uname().nodename,
-        #        'btime_sys': time.time(),
-        #            'ndirs': len(alldirs),
-        #           'nfiles': len(allfiles),
-        #      'directories': directories, # directories searched
-        #        'backupdir': backupdir }
+                        allfiles[absfilepath] = { 'modtime': [os.path.getmtime(absfilepath)],
+                                                     'size': [os.path.getsize( absfilepath)] }
+                                               # 'contents': contents }
 
         # pickle dictionaries - note the order for unpickling
         if self.newbackup:
@@ -317,47 +210,6 @@ class Backup:
             self.curr_dirs = alldirs
             self.curr_files = allfiles
 
-    #TEMP below is phased out
-    def current(self):
-        alldirs = {}
-        allfiles = {}
-        for directory in self.directories: 
-            if not os.path.isdir(directory): continue
-            directory = os.path.abspath(os.path.expanduser(directory))
-            print('c given directory: {}'.format(directory))
-            # store root directory
-            alldirs[directory] = { 'dirname': os.path.basename(directory),
-                                   'modtime': [os.path.getmtime(directory)] }
-            for root, dirs, files in os.walk(directory):
-                #if os.path.isfile(os.path.join(root,".backupignore")): continue
-                for dirname in dirs:
-                    absdirpath = os.path.join(root, dirname)
-                    if not os.path.isdir(absdirpath): continue
-                    print('c directory: {}'.format(absdirpath))
-                    alldirs[absdirpath] = { 'dirname': dirname,
-                                            'modtime': [os.path.getmtime(absdirpath)] }
-                for filename in files:
-                    ext = os.path.splitext(filename)[-1].lstrip('.')
-                    if ext in ['py', 'txt', 'R']:
-                        absfilepath = os.path.join(root, filename)
-                        if not os.path.isfile(absfilepath): continue
-                        print('c file: {}'.format(absfilepath))
-                        #with open(absfilepath, "rb") as fileobj:
-                        #    contents = fileobj.read()
-                        allfiles[absfilepath] = { 'filename': filename,
-                                                   'modtime': [os.path.getmtime(absfilepath)],
-                                                      'size': [os.path.getsize( absfilepath)] }
-                                                # 'contents': contents }
-        ## include higher level backup information
-        #info = { 'nodename': os.uname().nodename,
-        #        'btime_sys': time.time(),
-        #            'ndirs': len(alldirs),
-        #           'nfiles': len(allfiles),
-        #      'directories': self.directories, # directories searched
-        #        'backupdir': self.backupdir }
-        self.curr_info = infodict(alldirs, allfiles)
-        self.curr_dirs = alldirs
-        self.curr_files = allfiles
     def infodict(self, dirs, files):
         # include higher level backup information
         info = { 'nodename': os.uname().nodename,
@@ -422,5 +274,5 @@ def readmod(modfile):
     return moddict
 
 if __name__ == "__main__":
-    Backup()
-    #Backup(directories = ['../notes', '../R'], newbackup = True)
+    #Backup()
+    Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
