@@ -145,7 +145,7 @@ class Backup:
 
             pdb.set_trace()
 
-            if os.uname().nodename == self.curr_info['nodename']:
+            if os.uname().nodename == self.back_info['nodename']:
                 print("b SAME NODENAME")
                 # update backupfile if files or directories have chanaged
                 #   need: to only allow a certain number of files to be kept
@@ -274,5 +274,5 @@ def readmod(modfile):
     return moddict
 
 if __name__ == "__main__":
-    #Backup()
-    Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
+    Backup(backupdir = "~/Dropbox")
+    #Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
