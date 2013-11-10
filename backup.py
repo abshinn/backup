@@ -162,6 +162,10 @@ class Backup:
                 # if so, then write to file system
                 print("b DIFFERENT NODENAME")
                 # check to make sure current system's modification isn't newer than the backup system's mods
+                print("{} files changed".format(len(self.changed_files)))
+                print("{} new files".format(len(self.new_files)))
+                print("{} directories changed".format(len(self.changed_dirs)))
+                print("{} new directories".format(len(self.new_dirs)))
                 if self.ignore_files:
                     print("Files have been modified on this system since last backup! {}".format(len(self.ignore_files)))
 
@@ -181,9 +185,10 @@ class Backup:
             # store root directory
             alldirs[directory] = { 'modtime': [os.path.getmtime(directory)] }
             for root, dirs, files in os.walk(directory):
-                #if os.path.isfile(os.path.join(root,".backupignore")): continue
                 for dirname in dirs:
                     absdirpath = os.path.join(root, dirname)
+                    # don't include .git directory and subsequent directories
+                    if '.git' in absdirpath.split(os.sep): continue
                     if not os.path.isdir(absdirpath): continue
                     print('b directory: {}'.format(absdirpath))
                     alldirs[absdirpath] = { 'modtime': [os.path.getmtime(absdirpath)] }
@@ -191,6 +196,8 @@ class Backup:
                     ext = os.path.splitext(filename)[-1].lstrip('.')
                     if ext in ['py', 'txt', 'R']:
                         absfilepath = os.path.join(root, filename)
+                        # don't include files in .git directories
+                        if '.git' in absfilepath.split(os.sep): continue
                         if not os.path.isfile(absfilepath): continue
                         print('b file: {}'.format(absfilepath))
                         #with open(absfilepath, "rb") as fileobj:
@@ -211,7 +218,7 @@ class Backup:
             self.curr_files = allfiles
 
     def infodict(self, dirs, files):
-        # include higher level backup information
+        """turn higher level backup information into a dictionary"""
         info = { 'nodename': os.uname().nodename,
                 'btime_sys': time.time(),
                     'ndirs': len(dirs),
@@ -232,39 +239,10 @@ class Backup:
             modtime
             self.modification[filepath]['modtime'] = filedict['modtime']
 
-        #self.abspath  = dictionary['abspath' ]
-        #self.name     = dictionary['name'    ]
-        #self.modtime  = dictionary['modtime ']
-        #self.utcmtime = dictionary['utcmtime']
-        #self.username = dictionary['username']
-        #self.modhist  = dictionary['history' ]
-        #self.size     = dictionary['size'    ]
-        #self.contents = dictionary['contents']
-# possibilities:
-#   file changed
-#   file didn't change
-#   new file
-#   file deleted
-        #for filepath, filedict in self.diff.items():
-        #    self.modification[filepath]
     def writeToFileSystem():
         pass
     def writeToBackup():
         pass
-        #if self.pickled:
-        #    backupinfo = {  "nodename": os.uname().nodename,
-        #                   "btime_utc": time.ctime(), 
-        #                   "btime_sys": time.time(),
-        #                      "nfiles": len(modification),
-        #                       "files": list(modification.keys()),
-        #                      "moddir": moddir,
-        #                 "directories": directories,
-        #                        "exts": exts  }
-        #    with open(os.path.join(self.moddir,"backup.dat")), "wb") as dat:
-        #        pickle.dump(modification, dat)
-        #        pickle.dump(backupinfo, dat)
-        #else:
-        #    return modification
 
 def readmod(modfile):
     with open(modfile, "rb") as f:
@@ -274,5 +252,5 @@ def readmod(modfile):
     return moddict
 
 if __name__ == "__main__":
-    #Backup(backupdir = "~/Dropbox")
-    Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
+    Backup(backupdir = "~/Dropbox")
+    #Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
