@@ -4,14 +4,22 @@
 # - run backup to save current system's files
 # - run backup to check for other system's changes
 
-import os, pickle, time, filecmp
+import os, pickle, time, difflib
 import pdb
 
-def diff(binfile1, binfile1):
-    if len(binfile1) =! len(binfile2): return True
-    diff = difflib.differ().compare(binfile1.splitlines(), binfile2.splitlines())
-    #
-
+def diff(binfile1, binfile2):
+    """diff - returns True if two strings are different, False if no change has been made"""
+    # quick check: see if the length of the file has changed
+    if len(binfile1) != len(binfile2):
+        return True
+    # deep check: check every character to make sure no changes have been made
+    # note: methods quick_ratio or real_quick_ratio suffices for small text files
+    else: 
+        diff = difflib.SequenceMatcher(None, binfile1, binfile2).ratio()
+        if diff == 1.0: 
+            return False
+        else:
+            return True
 
 class FileMod:
     def __init__(self, abspath):
@@ -182,8 +190,26 @@ class Backup:
 # if the current system has older files than the backup file, update system
 # ... and ignore directories controlled by git
 
+            newer = []
+            for dirname in self.directories:
+                directory = os.path.abspath(os.path.expanduser(dirname))
+                if os.path.isdir(directory):
+                    if self.curr_dirs[directory]['modtime'][0] > self.back_info['btime_sys']:
+                        newer.append(dirname)
+
+            # ask
+            if newer:
+                print("WARNING: files on {} have been changed since the update on {}".format(os.uname().nodename, self.back_info['nodename']))
+                if input("mock: merge changes between the two systems?") != "y": 
+                    print("mock: exit")
+                else: print("mock: merge changes")
+            else:
+                ask = input("mock: update current file system based on backup file\n press any key")
+
+#TEMP ignore directories controlled by git, i.e., with .git directory
+#TEMP ... but still make copies of the files
             # find new directories
-            new_dirs, changed_dirs = {}, {}
+            new_dirs = {}
             for dirname in self.back_dirs:
                 if dirname not in self.curr_dirs: 
                     new_dirs[dirname] = self.back_dirs[dirname]
@@ -199,7 +225,7 @@ class Backup:
             self.removed_dirs = removed_dirs
 
             # store new and changed file names in aptly named dictionaries
-            new_files, changed_files, ignore_files = {}, {}, {}
+            new_files, changed_files, ignored_files = {}, {}, {}
             for filename in self.back_files:
                 if filename not in self.curr_files: 
                     new_files[filename] = self.back_files[filename]
@@ -208,12 +234,12 @@ class Backup:
                     changed_files[filename] = self.back_files[filename]
                     print("changed: {}".format(filename))
                 elif self.back_files[filename]['modtime'][0] < self.curr_files[filename]['modtime'][0]:
-                    difflib.SequenceMatcher
-                    ignore_files[filename] = self.back_files[filename]
+                    #if diff(self.back_files[filename]['contents'][0], self.curr_files[filename]['contents'][0]):
+                    ignored_files[filename] = self.back_files[filename]
                     print("WARNING") #TEMP create an error to raise here
             self.new_files = new_files
             self.changed_files = changed_files
-            self.ignore_files = ignore_files
+            self.ignored_files = ignored_files
 
             # check for removed files
             removed_files = {}
@@ -223,20 +249,38 @@ class Backup:
                     print("removed: {}".format(filename))
             self.removed_files = removed_files
 
+            # print stats
             print("b {} last updated on {}:".format(self.backupfile, self.back_info['nodename']))
             print("b {} files created".format(len(self.new_files)))
             print("b {} files changed".format(len(self.changed_files)))
             print("b {} files removed".format(len(self.removed_files)))
+            print("b {} files ignored".format(len(self.ignored_files)))
             print("b {} directories created".format(len(self.new_dirs)))
             print("b {} directories removed".format(len(self.removed_dirs)))
+
+            # create and remove directories
+            for dirname in self.new_dirs:
+                print("mock: created directory: {}".format(dirname))
+            for dirname in self.removed_dirs:
+                print("mock: removed directory: {}".format(dirname))
+            for filename in self.new_files:
+                print("mock: created file: {}".format(filename))
+            for filename in self.removed_files:
+                print("mock: removed file: {}".format(filename))
+
+            # update backup.dat
+            print("mock: {} updated".format(self.backupfile))
+
+            # pickle back_ dictionaries back in backup.dat, now with new info dictionary?
+
             ## update backup.dat if files or directories have changed
-            ##for dirname in self.changed_dirs:
-            ##    self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
+            #for dirname in self.changed_dirs:
+            #    self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
+            #    #TEMP update contents too!
             #for filename in self.changed_files:
-            #    if filecmp.cmp(filename)
             #    self.curr_files[filename]['modtime'].extend(self.back_files[filename]['modtime'])
-            #    #self.cur_files[filename]['contents'].extend(self.back_files[filename]['contents'])
-            ## even if no files or directories have changed, still write to backup.dat
+            #    #self.curr_files[filename]['contents'].extend(self.back_files[filename]['contents'])
+            # even if no files or directories have changed, still write to backup.dat
             #with open(self.backupfile, "wb") as dat:
             #    pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
             #    pickle.dump(self.curr_dirs, dat)
