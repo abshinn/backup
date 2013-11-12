@@ -159,11 +159,22 @@ class Backup:
             self.removed_files = removed_files
 
             # update backup.dat if files or directories have changed
+            # note: the curr dictionaries have only one element in 'modtime' and 'contents' lists,
+            #       and that element is the most recent information - so using the extend method
+            #       will keep the newest modification at element 0
             for dirname in self.changed_dirs:
                 self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
+                # housekeeping: cleanup backup.dat by only keeping at most ten modifications
+                if len(self.curr_dirs[dirname]['modtime']) > 10:
+                    self.curr_dirs[dirname]['modtime'] = self.curr_dirs[dirname]['modtime'][0:10]
             for filename in self.changed_files:
                 self.curr_files[filename]['modtime'].extend(self.back_files[filename]['modtime'])
-                #self.cur_files[filename]['contents'].extend(self.back_files[filename]['contents'])
+                self.curr_files[filename]['contents'].extend(self.back_files[filename]['contents'])
+                # housekeeping: cleanup backup.dat by only keeping at most ten modifications
+                if len(self.curr_files[filename]['modtime']) > 10: 
+                    self.curr_files[filename]['modtime'] = self.curr_files[filename]['modtime'][0:10]
+                    self.curr_files[filename]['contents'] = self.curr_files[filename]['contents'][0:10]
+
             # even if no files or directories have changed, still write to backup.dat
             with open(self.backupfile, "wb") as dat:
                 pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
@@ -176,6 +187,12 @@ class Backup:
             print("b {} directories created".format(len(self.new_dirs)))
             print("b {} directories changed".format(len(self.changed_dirs)))
             print("b {} directories removed".format(len(self.removed_dirs)))
+
+            btime_utc = time.strftime("%a %b %d %H:%M", time.gmtime())
+            print('backup: {}; {}'.format(btime_utc, self.backupfile)) 
+            print('  {} new dir(s)\n  {} removed dir(s)'.format(len(self.new_dirs), len(self.removed_dirs))) 
+            print('  {} new file(s)\n  {} updated file(s)\n  {} removed file(s)'.format(len(self.new_files), 
+                len(self.changed_files), len(self.removed_files))) 
 
         # if backup is run on a different system other than was used to update backup.py previously
         else: 
@@ -190,6 +207,7 @@ class Backup:
 # if the current system has older files than the backup file, update system
 # ... and ignore directories controlled by git
 
+            # check if directories on current system have been modified since backup.dat has been modified
             newer = []
             for dirname in self.directories:
                 directory = os.path.abspath(os.path.expanduser(dirname))
@@ -199,9 +217,10 @@ class Backup:
 
             # ask
             if newer:
-                print("WARNING: files on {} have been changed since the update on {}".format(os.uname().nodename, self.back_info['nodename']))
+                print("WARNING: files on {} have been changed since the update on {}".format(os.uname().nodename, 
+                    self.back_info['nodename']))
                 if input("mock: merge changes between the two systems?") != "y": 
-                    print("mock: exit")
+                    print("mock: exiting, no changes made")
                 else: print("mock: merge changes")
             else:
                 ask = input("mock: update current file system based on backup file\n press any key")
@@ -347,20 +366,23 @@ class Backup:
                         if '.git' in absfilepath.split(os.sep): continue
                         if not os.path.isfile(absfilepath): continue
                         print('b file: {}'.format(absfilepath))
-                        #with open(absfilepath, "rb") as fileobj:
-                        #    contents = fileobj.read()
+                        with open(absfilepath, "rb") as fileobj:
+                            contents = fileobj.read()
                         allfiles[absfilepath] = { 'modtime': [os.path.getmtime(absfilepath)],
-                                                     'size': [os.path.getsize( absfilepath)] }
-                                               # 'contents': contents }
+                                                     'size': [os.path.getsize( absfilepath)],
+                                                 'contents': contents }
 
         # pickle dictionaries - note the order for unpickling
+        info = self.infodict(alldirs, allfiles)
         if self.newbackup:
             with open(self.backupfile, "wb") as dat:
-                pickle.dump(self.infodict(alldirs, allfiles), dat)
+                pickle.dump(info, dat)
                 pickle.dump(alldirs, dat)
                 pickle.dump(allfiles, dat)
+            btime_utc = time.strftime("%a %b %d %H:%M", time.gmtime( info['btime_sys'] ))
+            print('backup: {}; {} files saved to {}'.format(btime_utc, info['nfiles'], self.backupfile)) 
         else:
-            self.curr_info = self.infodict(alldirs, allfiles)
+            self.curr_info = info
             self.curr_dirs = alldirs
             self.curr_files = allfiles
 
