@@ -76,9 +76,12 @@ class BackupInfo:
 
 
 class Backup:
-    def __init__(self, directories = [], backupdir = '', exts = ['py', 'txt', 'R'], newbackup = False):
+    def __init__(self, directories = [], backupdir = '', exts = ['py', 'txt', 'R', 'tex'], newbackup = False):
+
+        pdb.set_trace()
 
         self.directories = directories
+        self.exts = exts
 
         # check for pickled backup file
         if not backupdir:
@@ -101,12 +104,12 @@ class Backup:
             self.back_dirs = pickle.load(f)
             self.back_files = pickle.load(f)
 
+        #TEMP override defualt
         self.directories = self.back_info['directories']
-        self.exts = exts 
 
         # collect the current state of the system, using the same directories as in backup.dat
         self.backit()
-        
+
         #TEMP based on system and update time...
         # if backup is run on the same system of the previous backup:
         if os.uname().nodename == self.back_info['nodename']:
@@ -180,19 +183,31 @@ class Backup:
                 pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
                 pickle.dump(self.curr_dirs, dat)
                 pickle.dump(self.curr_files, dat)
-            print("b {} updated:".format(self.backupfile))
-            print("b {} files created".format(len(self.new_files)))
-            print("b {} files changed".format(len(self.changed_files)))
-            print("b {} files removed".format(len(self.removed_files)))
-            print("b {} directories created".format(len(self.new_dirs)))
-            print("b {} directories changed".format(len(self.changed_dirs)))
-            print("b {} directories removed".format(len(self.removed_dirs)))
+            #print("b {} updated:".format(self.backupfile))
+            #print("b {} files created".format(len(self.new_files)))
+            #print("b {} files changed".format(len(self.changed_files)))
+            #print("b {} files removed".format(len(self.removed_files)))
+            #print("b {} directories created".format(len(self.new_dirs)))
+            #print("b {} directories changed".format(len(self.changed_dirs)))
+            #print("b {} directories removed".format(len(self.removed_dirs)))
 
             btime_utc = time.strftime("%a %b %d %H:%M", time.gmtime())
             print('backup: {}; {}'.format(btime_utc, self.backupfile)) 
             print('  {} new dir(s)\n  {} removed dir(s)'.format(len(self.new_dirs), len(self.removed_dirs))) 
             print('  {} new file(s)\n  {} updated file(s)\n  {} removed file(s)'.format(len(self.new_files), 
                 len(self.changed_files), len(self.removed_files))) 
+
+            for dirname in removed_dirs:
+                print("- {}".format(filename))
+            for dirname in new_dirs:
+                print("+ {}".format(filename))
+
+            for filename in removed_files:
+                print("- {}".format(filename))
+            for filename in new_files:
+                print("+ {}".format(filename))
+            for filename in changed_files:
+                print("u {}".format(filename))
 
         # if backup is run on a different system other than was used to update backup.py previously
         else: 
@@ -360,7 +375,7 @@ class Backup:
                     alldirs[absdirpath] = { 'modtime': [os.path.getmtime(absdirpath)] }
                 for filename in files:
                     ext = os.path.splitext(filename)[-1].lstrip('.')
-                    if ext in ['py', 'txt', 'R']:
+                    if ext in self.exts: 
                         absfilepath = os.path.join(root, filename)
                         # don't include files in .git directories
                         if '.git' in absfilepath.split(os.sep): continue
@@ -370,7 +385,7 @@ class Backup:
                             contents = fileobj.read()
                         allfiles[absfilepath] = { 'modtime': [os.path.getmtime(absfilepath)],
                                                      'size': [os.path.getsize( absfilepath)],
-                                                 'contents': contents }
+                                                 'contents': [contents] }
 
         # pickle dictionaries - note the order for unpickling
         info = self.infodict(alldirs, allfiles)
@@ -422,4 +437,4 @@ def readmod(modfile):
 
 if __name__ == "__main__":
     Backup(backupdir = "~/Dropbox")
-    #Backup(directories = ['~/notes', '~/R'], backupdir = "~/Dropbox", newbackup = True)
+    #Backup(directories = ['~/notes', '~/R', '~/cv'], backupdir = "~/Dropbox", newbackup = True)
