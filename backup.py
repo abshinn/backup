@@ -1,4 +1,5 @@
-# use Python 3
+#!/usr/bin/env python3
+
 #
 # Goal: to backup and keep track of chosen files and directories on the laptop and desktop
 # - run backup to save current system's files
@@ -74,139 +75,96 @@ class BackupInfo:
         return "Last backup {self.btime_utc}; on {self.nodename}\n" \
                "  {self.nfiles} {self.exts!r} files from {self.directories!r}".format(self=self)
 
+class State(object):
+    def __init__(self, info, dirs, fils):
+        self.info = info
+        self.dirs = dirs
+        self.fils = fils
 
-class Backup:
-    def __init__(self, directories = [], backupdir = '', exts = ['py', 'txt', 'R', 'tex'], newbackup = False):
+class Comparison(object):
+    def __init__(self, new, changed, removed):
+        self.new = new
+        self.changed = changed
+        self.removed = removed
+    def __format__(self, format_spec):
+        if format_spec == 'l':
+            return format(len(self), format_spec)
 
-        pdb.set_trace()
+class stateCompare(object):
+    def __init__(self, dirComparison, filComparison):
+        self.dirs = dirComparison
+        self.fils = filComparison
+
+
+class Backup(object):
+    def __init__(self, directories = [], backupdir = "", exts = ["py", "txt", "R", "tex"], newbackup = False):
 
         self.directories = directories
         self.exts = exts
+        self.newbackup = newbackup
 
         # check for pickled backup file
         if not backupdir:
             backupdir = os.getcwd()
-        self.backupdir = os.path.abspath(os.path.expanduser(backupdir))
-        self.backupfile = os.path.join(self.backupdir,'backup.dat')
 
-        self.newbackup = newbackup
-        if self.newbackup:
-            self.backit()
-            return
+        self.backupdir = os.path.abspath(os.path.expanduser(backupdir))
+        self.backupfile = os.path.join(self.backupdir,"backup.dat")
+
+        self.current = self.getCurrent()
+
+        if self.newbackup: 
+            # nothing more to do
+            return self.current
 
         if not os.path.isfile(self.backupfile): 
-            print('Backup file does not exits in {self.backupdir}'.format(self=self))
+            print("Backup file does not exits in {self.backupdir}".format(self = self))
             return
 
-        # open backup file
-        with open(self.backupfile, "rb") as f:
-            self.back_info = pickle.load(f)
-            self.back_dirs = pickle.load(f)
-            self.back_files = pickle.load(f)
+        self.backup = self.loadBackup() 
 
         #TEMP override defualt
-        self.directories = self.back_info['directories']
+        self.directories = self.backup.info["directories"]
 
         # collect the current state of the system, using the same directories as in backup.dat
-        self.backit()
+        self.current = self.getCurrent()
+
+# read backup
+# read current file system
+# compare <---
+# update
 
         #TEMP based on system and update time...
         # if backup is run on the same system of the previous backup:
-        if os.uname().nodename == self.back_info['nodename']:
+        if os.uname().nodename == self.backup.info["nodename"]:
 
-            # store new and changed directory names in aptly named dictionaries
-            new_dirs, changed_dirs = {}, {}
-            for dirname in self.curr_dirs:
-                if dirname not in self.back_dirs: 
-                    new_dirs[dirname] = self.curr_dirs[dirname]
-                    print("new: {}".format(dirname))
-                # note: directories get their modtime from the most recent file changed from within the directory
-                elif self.curr_dirs[dirname]['modtime'][0] > self.back_dirs[dirname]['modtime'][0]:
-                    changed_dirs[dirname] = self.curr_dirs[dirname]
-                    print("changed: {}".format(dirname))
-                elif self.curr_dirs[dirname]['modtime'][0] < self.back_dirs[dirname]['modtime'][0]:
-                    print("WARNING") #TEMP create an error to raise here
-            self.new_dirs = new_dirs
-            self.changed_dirs = changed_dirs
+            self.different = self.compare(self.current, self.backup)
 
-            # check for removed directories
-            removed_dirs = {}
-            for dirname in self.back_dirs:
-                if dirname not in self.curr_dirs:
-                    removed_dirs[dirname] = self.back_dirs[dirname]
-                    print("removed: {}".format(dirname))
-            self.removed_dirs = removed_dirs
+            self.update()
 
-            # store new and changed file names in aptly named dictionaries
-            new_files, changed_files, ignore_files = {}, {}, {}
-            for filename in self.curr_files:
-                if filename not in self.back_files: 
-                    new_files[filename] = self.curr_files[filename]
-                    print("new: {}".format(filename))
-                elif self.curr_files[filename]['modtime'][0] > self.back_files[filename]['modtime'][0]:
-                    changed_files[filename] = self.curr_files[filename]
-                    print("changed: {}".format(filename))
-                elif self.curr_files[filename]['modtime'][0] < self.back_files[filename]['modtime'][0]:
-                    ignore_files[filename] = self.curr_files[filename]
-                    print("WARNING") #TEMP create an error to raise here
-            self.new_files = new_files
-            self.changed_files = changed_files
-            self.ignore_files = ignore_files
-
-            # check for removed files
-            removed_files = {}
-            for filename in self.back_files:
-                if filename not in self.curr_files:
-                    removed_files[filename] = self.back_files[filename]
-                    print("removed: {}".format(filename))
-            self.removed_files = removed_files
-
-            # update backup.dat if files or directories have changed
-            # note: the curr dictionaries have only one element in 'modtime' and 'contents' lists,
-            #       and that element is the most recent information - so using the extend method
-            #       will keep the newest modification at element 0
-            for dirname in self.changed_dirs:
-                self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
-                # housekeeping: cleanup backup.dat by only keeping at most ten modifications
-                if len(self.curr_dirs[dirname]['modtime']) > 10:
-                    self.curr_dirs[dirname]['modtime'] = self.curr_dirs[dirname]['modtime'][0:10]
-            for filename in self.changed_files:
-                self.curr_files[filename]['modtime'].extend(self.back_files[filename]['modtime'])
-                self.curr_files[filename]['contents'].extend(self.back_files[filename]['contents'])
-                # housekeeping: cleanup backup.dat by only keeping at most ten modifications
-                if len(self.curr_files[filename]['modtime']) > 10: 
-                    self.curr_files[filename]['modtime'] = self.curr_files[filename]['modtime'][0:10]
-                    self.curr_files[filename]['contents'] = self.curr_files[filename]['contents'][0:10]
-
-            # even if no files or directories have changed, still write to backup.dat
-            with open(self.backupfile, "wb") as dat:
-                pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
-                pickle.dump(self.curr_dirs, dat)
-                pickle.dump(self.curr_files, dat)
-            #print("b {} updated:".format(self.backupfile))
-            #print("b {} files created".format(len(self.new_files)))
-            #print("b {} files changed".format(len(self.changed_files)))
-            #print("b {} files removed".format(len(self.removed_files)))
-            #print("b {} directories created".format(len(self.new_dirs)))
-            #print("b {} directories changed".format(len(self.changed_dirs)))
-            #print("b {} directories removed".format(len(self.removed_dirs)))
+            self.writeToBackup()
 
             btime_utc = time.strftime("%a %b %d %H:%M", time.gmtime())
+            #print('backup: {}; {}'.format(btime_utc, self.backupfile)) 
+            #print('  {} new dir(s)\n  {} removed dir(s)'.format(len(self.different.dirs.new), 
+            #    len(self.different.dirs.removed))) 
+            #print('  {} new file(s)\n  {} updated file(s)\n  {} removed file(s)'.format(len(self.different.fils.new), 
+            #    len(self.different.fils.changed), len(self.different.fils.removed))) 
+
             print('backup: {}; {}'.format(btime_utc, self.backupfile)) 
-            print('  {} new dir(s)\n  {} removed dir(s)'.format(len(self.new_dirs), len(self.removed_dirs))) 
-            print('  {} new file(s)\n  {} updated file(s)\n  {} removed file(s)'.format(len(self.new_files), 
-                len(self.changed_files), len(self.removed_files))) 
+            print('  {self.new} new dir(s)\n  {self.removed} removed dir(s)'.format(self = self.different.dirs))
+            print('  {} new file(s)\n  {} updated file(s)\n  {} removed file(s)'.format(len(self.different.fils.new), 
+                len(self.different.fils.changed), len(self.different.fils.removed))) 
 
-            for dirname in removed_dirs:
+            for dirname in self.different.dirs.removed:
                 print("- {}".format(filename))
-            for dirname in new_dirs:
+            for dirname in self.different.dirs.new:
                 print("+ {}".format(filename))
 
-            for filename in removed_files:
+            for filename in self.different.fils.removed:
                 print("- {}".format(filename))
-            for filename in new_files:
+            for filename in self.different.fils.new:
                 print("+ {}".format(filename))
-            for filename in changed_files:
+            for filename in self.different.fils.changed:
                 print("u {}".format(filename))
 
         # if backup is run on a different system other than was used to update backup.py previously
@@ -305,60 +263,11 @@ class Backup:
             # update backup.dat
             print("mock: {} updated".format(self.backupfile))
 
-            # pickle back_ dictionaries back in backup.dat, now with new info dictionary?
-
-            ## update backup.dat if files or directories have changed
-            #for dirname in self.changed_dirs:
-            #    self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
-            #    #TEMP update contents too!
-            #for filename in self.changed_files:
-            #    self.curr_files[filename]['modtime'].extend(self.back_files[filename]['modtime'])
-            #    #self.curr_files[filename]['contents'].extend(self.back_files[filename]['contents'])
-            # even if no files or directories have changed, still write to backup.dat
-            #with open(self.backupfile, "wb") as dat:
-            #    pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
-            #    pickle.dump(self.curr_dirs, dat)
-            #    pickle.dump(self.curr_files, dat)
-
-        #pdb.set_trace()
-
-        #if os.uname().nodename == self.back_info['nodename']:
-        #    print("b SAME NODENAME")
-        #    # update backupfile if files or directories have chanaged
-        #    #   need: to only allow a certain number of files to be kept
-        #    for dirname in self.changed_dirs:
-        #        self.curr_dirs[dirname]['modtime'].extend(self.back_dirs[dirname]['modtime'])
-        #    for filename in self.changed_files:
-        #        self.curr_files[filename]['modtime'].extend(self.back_files[filename]['modtime'])
-        #        #self.cur_files[filename]['contents'].extend(self.back_files[filename]['contents'])
-        #    with open(self.backupfile, "wb") as dat:
-        #        pickle.dump(self.infodict(self.curr_dirs, self.curr_files), dat)
-        #        pickle.dump(self.curr_dirs, dat)
-        #        pickle.dump(self.curr_files, dat)
-        #else: # if the last backup was not on the current system:
-        #    # if so, then write to file system
-        #    print("b DIFFERENT NODENAME")
-        #    # if running backup from a different system, a new directory will be present in the backup,
-        #    # but not be present in the current system, therefore 'new' is 'removed' in this case
-        #    self.new_dirs = self.removed_dirs
-        #    self.new_files = self.removed_files
-        #    # check to make sure current system's modification isn't newer than the backup system's mods
-        #    print("{} files changed".format(len(self.changed_files)))
-        #    print("{} new files".format(len(self.new_files)))
-        #    print("{} directories changed".format(len(self.changed_dirs)))
-        #    print("{} new directories".format(len(self.new_dirs)))
-        #    if self.ignore_files:
-        #        print("Files have been modified on this system since last backup! {}".format(len(self.ignore_files)))
-
-        # if files are changed on same system, update backup file 
-        # if files have been changed on other system:
-        #     check to make sure updates are newer than current system's, then update file system using backup
-
-    def backit(self):
+    def getCurrent(self):
         """ """
         # initialize dictionaries
         alldirs = {}
-        allfiles = {}
+        allfils = {}
         for directory in self.directories: 
             directory = os.path.abspath(os.path.expanduser(directory))
             if not os.path.isdir(directory): continue
@@ -383,57 +292,125 @@ class Backup:
                         print('b file: {}'.format(absfilepath))
                         with open(absfilepath, "rb") as fileobj:
                             contents = fileobj.read()
-                        allfiles[absfilepath] = { 'modtime': [os.path.getmtime(absfilepath)],
-                                                     'size': [os.path.getsize( absfilepath)],
-                                                 'contents': [contents] }
+                        allfils[absfilepath] = { 'modtime': [os.path.getmtime(absfilepath)],
+                                                    'size': [os.path.getsize( absfilepath)],
+                                                'contents': [contents] }
 
         # pickle dictionaries - note the order for unpickling
-        info = self.infodict(alldirs, allfiles)
+        info = self.infodict(alldirs, allfils)
         if self.newbackup:
             with open(self.backupfile, "wb") as dat:
                 pickle.dump(info, dat)
                 pickle.dump(alldirs, dat)
-                pickle.dump(allfiles, dat)
+                pickle.dump(allfils, dat)
             btime_utc = time.strftime("%a %b %d %H:%M", time.gmtime( info['btime_sys'] ))
             print('backup: {}; {} files saved to {}'.format(btime_utc, info['nfiles'], self.backupfile)) 
         else:
-            self.curr_info = info
-            self.curr_dirs = alldirs
-            self.curr_files = allfiles
+            return State(info, alldirs, allfils)
 
-    def infodict(self, dirs, files):
+    def infodict(self, dirs, fils):
         """turn higher level backup information into a dictionary"""
         info = { 'nodename': os.uname().nodename,
                 'btime_sys': time.time(),
                     'ndirs': len(dirs),
-                   'nfiles': len(files),
+                   'nfiles': len(fils),
               'directories': self.directories, # directories searched
                 'backupdir': self.backupdir }
         return info
-    def update(self):
-        """Update backup.dat"""
-        # new file
-        for filepath, filedict in self.new.items():
-            self.modification[filepath] = filedict
 
-        # updated file
-        for filepath, filedict in self.changed.items():
-            modtime = filedict['modtime']
-            # turn dictionary items into lists containing previous updates
-            modtime
-            self.modification[filepath]['modtime'] = filedict['modtime']
+    def compare(self, state1, state2):
+        """compare state objects"""
+
+        # store new and changed directory names in aptly named dictionaries
+        new_dirs, changed_dirs = {}, {}
+        for dirname in state1.dirs:
+            if dirname not in state2.dirs: 
+                new_dirs[dirname] = state1.dirs[dirname]
+                print("new: {}".format(dirname))
+            # note: directories get their modtime from the most recent file changed from within the directory
+            elif state1.dirs[dirname]['modtime'][0] > state2.dirs[dirname]['modtime'][0]:
+                changed_dirs[dirname] = state1.dirs[dirname]
+                print("changed: {}".format(dirname))
+            elif state1.dirs[dirname]['modtime'][0] < state2.dirs[dirname]['modtime'][0]:
+                print("WARNING") #TEMP create an error to raise here
+
+        # check for removed directories
+        removed_dirs = {}
+        for dirname in state2.dirs:
+            if dirname not in state1.dirs:
+                removed_dirs[dirname] = state2.dirs[dirname]
+                print("removed: {}".format(dirname))
+
+        dirComparison = Comparison(new_dirs, changed_dirs, removed_dirs)
+
+        # store new and changed file names in aptly named dictionaries
+        new_files, changed_files, ignore_files = {}, {}, {}
+        for filename in state1.fils:
+            if filename not in state2.fils: 
+                new_files[filename] = state1.fils[filename]
+                print("new: {}".format(filename))
+            elif state1.fils[filename]['modtime'][0] > state2.fils[filename]['modtime'][0]:
+                changed_files[filename] = state1.fils[filename]
+                print("changed: {}".format(filename))
+            elif state1.fils[filename]['modtime'][0] < state2.fils[filename]['modtime'][0]:
+                ignore_files[filename] = state1.fils[filename]
+                print("WARNING") #TEMP create an error to raise here
+
+        # check for removed files
+        removed_files = {}
+        for filename in state2.fils:
+            if filename not in state1.fils:
+                removed_files[filename] = state2.fils[filename]
+                print("removed: {}".format(filename))
+
+        filComparison = Comparison(new_files, changed_files, removed_files)
+
+        return stateCompare(dirComparison, filComparison)
+
+    def update(self):
+        #TEMP
+        """Update and pickle backup file using current file system dictionary."""
+
+        # update backup.dat if files or directories have changed
+        # note: the curr dictionaries have only one element in "modtime" and "contents" lists,
+        #       and that element is the most recent information - so using the extend method
+        #       will keep the newest modification at element 0
+        for dirname in self.different.dirs.changed:
+            self.current.dirs[dirname]["modtime"].extend(self.backup.dirs[dirname]["modtime"])
+            # housekeeping: cleanup backup.dat by only keeping at most ten modifications
+            if len(self.current.dirs[dirname]["modtime"]) > 10:
+                self.current.dirs[dirname]["modtime"] = self.current.dirs[dirname]["modtime"][0:10]
+        for filename in self.different.fils.changed:
+            self.current.fils[filename]["modtime"].extend(self.backup.fils[filename]["modtime"])
+            self.current.fils[filename]["contents"].extend(self.backup.fils[filename]["contents"])
+            # housekeeping: cleanup backup.dat by only keeping at most ten modifications
+            if len(self.current.fils[filename]["modtime"]) > 10: 
+                self.current.fils[filename]["modtime"] = self.current.fils[filename]["modtime"][0:10]
+                self.current.fils[filename]["contents"] = self.current.fils[filename]["contents"][0:10]
 
     def writeToFileSystem():
         pass
-    def writeToBackup():
-        pass
+
+    def writeToBackup(self):
+        """Pickle backup file using current file system dictionary."""
+
+        with open(self.backupfile, "wb") as dat:
+            pickle.dump(self.infodict(self.current.dirs, self.current.fils), dat)
+            pickle.dump(self.current.dirs, dat)
+            pickle.dump(self.current.fils, dat)
+
+    def loadBackup(self):
+        """ """
+        # open backup file
+        with open(self.backupfile, "rb") as f:
+            info = pickle.load(f)
+            dirs = pickle.load(f)
+            fils = pickle.load(f)
+        return State(info, dirs, fils)
+
 
 def readmod(modfile):
-    with open(modfile, "rb") as f:
-        moddict = pickle.load(f)
-    for absfilepath in moddict.keys():
         pass
-    return moddict
 
 if __name__ == "__main__":
     Backup(backupdir = "~/Dropbox")
