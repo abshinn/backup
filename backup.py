@@ -7,10 +7,10 @@
 #
 
 # TODO
-#   write readme
-#   grab file contents in update only if file has changed
-#   create methods for file access/information
-#   create methods for file writing/copying
+#  - write readme
+#  - grab file contents in update only if file has changed
+#  - create methods for file access/information
+#  - create methods for file writing/copying
 
 import os, sys, pickle, time, difflib
 #import pdb DEBUG
