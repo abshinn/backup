@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 
-#
-# USAGE
-#   ./Backup.py new
-#   ./Backup.py update
-#
-
 # TODO
-#  - write readme
 #  - grab file contents in update only if file has changed
 #  - create methods for file access/information
 #  - create methods for file writing/copying
@@ -18,17 +11,24 @@ import os, sys, pickle, time, difflib
 class Backup(object):
     """Backup text files as binary strings.
 
-    Keyword Arguments defined in __init__:
-      directories -- directories to search
-                     (default: [cwd])
-        backupdir -- directory to save pickled backup file
-                     (defualt: cwd)
-             exts -- determines which files to save based on their extension
-                     (default: ["py", "txt", "R", "tex"])
+    KEYWORD ARGUMENTS
+       directories -- directories to search
+                      (default: [cwd])
+         backupdir -- directory to save pickled backup file
+                      (defualt: cwd)
+              exts -- determines which files to save based on their extension
+                      (default: ["py", "txt", "R", "tex"])
 
-    Main methods:
-         new -- create new pickled backup file
-      update -- update pickled backup file
+    MAIN METHODS
+          new -- create new pickled backup file
+       update -- update pickled backup file
+
+    USAGE
+       For example, if you wanted to backup files in "notes" and "cv" directories to
+       a "Dropbox" directory:
+           >>> Backup(directories = ['~/notes', '~/cv'], backupdir = "~/Dropbox").new()
+       And to update:
+           >>> Backup(backupdir = "~/Dropbox").update()
     """
 
     class State(object):
