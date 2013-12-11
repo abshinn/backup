@@ -31,21 +31,21 @@ class Backup(object):
            >>> Backup(backupdir = "~/Dropbox").update()
     """
 
-    class State(object):
+    class State:
         """Store the state of a backup in a simple object."""
         def __init__(self, info, dirs, files):
             self.info = info
             self.dirs = dirs
             self.files = files
 
-    class Comparison(object):
+    class Comparison:
         """Store backup changes in a simple object."""
         def __init__(self, new, changed, removed):
             self.new = new
             self.changed = changed
             self.removed = removed
 
-    class stateCompare(object):
+    class stateCompare:
         """Store backup comparison objects in a simple object."""
         def __init__(self, dirComparison, filComparison):
             self.dirs = dirComparison
