@@ -1,8 +1,0 @@
-backup.py
-
-PURPOSE
-  Not intended as version control or timemachine, but as an extra means to backup code.
-  Backup.py searches user-secified directories for specifed file extensions, and stores
-  those files as binary strings in pickled file, in a specified location. Personally, I
-  have backup.py send the pickled backups to a network drive.
-
